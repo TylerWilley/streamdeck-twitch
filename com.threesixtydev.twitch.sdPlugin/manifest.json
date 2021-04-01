@@ -1,0 +1,42 @@
+{
+  "Actions": [
+    {
+      "Name": "Stream Status", 
+      "Icon": "streamer-status",
+      "States": [
+        {
+          "Image": "streamer-status-on-air"
+        },
+        {
+          "Image": "streamer-status-off-air"
+        }
+      ],
+      "SupportedInMultiActions": false,
+      "Tooltip": "Show Streamer Status",
+      "UUID": "com.threesixtydev.twitch.streamerstatus"
+    }
+  ],
+  "SDKVersion": 2,
+  "Author": "Tyler Willey",
+  "CodePath": "code.html", 
+  "PropertyInspectorPath": "propertyinspector/index.html",
+  "Description": "Twitch Streamer Status",
+  "Name": "Twitch Streamer Status",
+  "Category": "Twitch Streamer",
+  "Version": "3.0",
+  "URL": "",
+  "OS": [
+    {
+        "Platform": "windows",
+        "MinimumVersion" : "10"
+    },
+    {
+        "Platform": "mac",
+        "MinimumVersion": "10.11"
+    }
+  ],
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion" : "4.1"
+  }
+}

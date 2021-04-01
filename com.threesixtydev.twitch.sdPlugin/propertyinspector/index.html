@@ -1,0 +1,101 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+	<title>com.threesixtydev.twitch Property Inspector</title>
+	<meta charset="utf-8" />
+	<link rel="stylesheet" href="css/sdpi.css">
+</head>
+
+<body>
+	<div class="sdpi-wrapper hidden" id="mainWrapper">
+		<div class="sdpi-item">
+			<div class="sdpi-item-label">Stream ID</div>
+			<input class="sdpi-item-value" id="user_login" onchange="saveSettings();" required />
+		</div>
+		<div class="sdpi-item">
+			<div class="sdpi-item-label">App ID</div>
+			<input class="sdpi-item-value" id="appId" onchange="saveSettings();" required />
+		</div>
+		<div class="sdpi-item">
+			<div class="sdpi-item-label">App Secret</div>
+			<input class="sdpi-item-value" type="password" id="appSecret" onchange="saveSettings();" required />
+		</div>
+		<div class="sdpi-item">
+			<div class="sdpi-item-label">Discord</div>
+			<button class="sdpi-item-value" type="button" onclick="reconnect();">Reconnect</button>
+			<button class="sdpi-item-value" type="button" onclick="reauthenticate();">Reauthenticate</button>
+		</div>
+	</div>
+
+	<script src="common.js"></script>
+	<script>
+
+		/** Step 1: Subscribe to the 'connected' event
+		 * and call your own initialization method.
+		 * The connected - event is emitted, when StreamDeck
+		 * has established a connection.
+		 * The 'connected' event carries a JSON object containing
+		 * necessary information about the connection and the
+		 * inital data.
+		 */
+		var uuid,
+			actionInfo,
+			ctx,
+			settings;
+
+		$SD.on('connected', (jsonObj) => connected(jsonObj));
+		$SD.on('didReceiveGlobalSettings', (jsonObj) => didReceiveGlobalSettings(jsonObj));
+		$SD.on('sendToPropertyInspector', (jsonObj) => sendToPropertyInspector(jsonObj));
+
+		function connected(jsonObj) {
+			console.log(jsonObj);
+			uuid = jsonObj.uuid;
+			actionInfo = jsonObj.actionInfo.action;
+			ctx = jsonObj.actionInfo.context;
+
+			$SD.api.getGlobalSettings(uuid);
+			local_settings = jsonObj.actionInfo.payload.settings
+			console.log(local_settings)
+			if('user_login' in local_settings)
+				document.getElementById('user_login').value = local_settings['user_login'];
+		};
+
+		function didReceiveGlobalSettings(jsonObj) {
+			settings = jsonObj.payload.settings;
+			document.getElementById('appId').value = settings.appId;
+			document.getElementById('appSecret').value = settings.appSecret;
+			document.getElementById('mainWrapper').classList.remove('hidden');
+		};
+
+		function saveSettings() {
+			const appId = document.getElementById('appId').value;
+			const appSecret = document.getElementById('appSecret').value;
+			if (appId != settings.appId || appSecret != settings.appSecret) {
+				settings.appId = appId;
+				settings.appSecret = appSecret;
+				settings.oauthToken = "";
+				settings.refreshToken = "";
+				$SD.api.setGlobalSettings(uuid, settings);
+			}
+			$SD.api.setSettings(uuid, {"user_login": document.getElementById('user_login').value});
+		};
+
+		function reconnect() {
+			$SD.api.sendToPlugin(uuid, actionInfo, {event: "reconnect"});
+		};
+
+		function reauthenticate() {
+			$SD.api.sendToPlugin(uuid, actionInfo, {event: "reauthenticate"});
+		};
+
+		function sendToPropertyInspector(jsonObj) {
+			console.log(jsonObj);
+			const payload = jsonObj.payload;
+			const {event} = payload;
+		}
+	</script>
+
+</body>
+
+</html>

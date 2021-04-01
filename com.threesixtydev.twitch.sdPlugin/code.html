@@ -1,0 +1,569 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+	<title>com.threesixtydev.twitch</title>
+    <meta charset="utf-8" />
+</head>
+
+<body>
+    <script>
+		var global_settings = { "appId": "",
+								"appSecret": "",
+								"oauthToken": ""};
+		var authorized = false;
+
+    	var websocket = null;
+    	var pluginUUID = null;
+    	
+    	var DestinationEnum = Object.freeze({"HARDWARE_AND_SOFTWARE":0, "HARDWARE_ONLY":1, "SOFTWARE_ONLY":2})
+    	
+
+		function update_button(button)
+		{
+			button.update()
+		}
+
+		let TwitchButton = class {
+			constructor(context, settings)
+			{
+				console.log("[" + context + "]New:", settings)
+				this.context = context
+				this.user_login = null
+				if('user_login' in settings)
+					this.user_login = settings['user_login']
+				this.streamer_icon = ""
+				this.thumb_attempted = 0
+				this.currentImage = null
+				this.connected = true
+				this.interval = null
+			}
+
+			onWillAppear() {
+				this.visible = true
+				if(authorized)
+				{
+					this.restart_updates()
+				}
+			}
+
+			onWillDisappear() {
+				this.visible = false
+				this.clear_interval()
+			}
+
+			log(line)
+			{
+				console.log("[" + this.context + "]" + line)
+			}
+
+			get_thumb()
+			{
+				if(this.thumb_attempted > 3)
+					return
+				this.thumb_attempted += 1
+				this.log("Updating Thumb:" + "https://api.twitch.tv/helix/users?login=" + this.user_login);
+				fetch("https://api.twitch.tv/helix/users?login=" + this.user_login, {'headers':{"Authorization": "Bearer " + global_settings['oauthToken'], "Client-Id": global_settings['appId']}})
+					.then(response => {
+						if (!response.ok) {
+							return null
+						}
+						return response.json()
+					})
+					.then(data => {
+						if (!data) {
+							this.log("Updating Thumb Failed");
+							return
+						}
+						var url = data.data[0].profile_image_url
+						console.log("[" + this.context + "]" + "Thumb response", data)
+						if(url)
+						{
+							this.streamer_icon = url
+						}
+						else
+						{
+							this.log("Updating Thumb Failed (bad response)");
+						}
+						this.getupdate()
+					});
+			}
+
+			update()
+			{
+				if(!this.streamer_icon)
+				{	
+					this.get_thumb()
+					return
+				}
+				this.getupdate()
+			}
+			
+			getupdate()
+			{
+				this.log("Updating From Twitch:" + "https://api.twitch.tv/helix/streams?user_login=" + this.user_login);
+				fetch("https://api.twitch.tv/helix/streams?user_login=" + this.user_login, {'headers':{"Authorization": "Bearer " + global_settings['oauthToken'], "Client-Id": global_settings['appId']}})
+					.then(response => {
+						if (!response.ok) {
+							this.log("Errored Twitch Response, Disconnecting")
+							this.set_image("Disconnected.png")
+							this.clear_interval()
+							this.connected = false
+							authorize()
+							return null
+						}
+						return response.json()
+					})
+					.then(data => {
+						if (!data) {
+							this.log("Blank Twitch Response, Disconnecting")
+							this.set_image("Disconnected.png")
+							this.clear_interval()
+							this.connected = false
+							authorize()
+							return
+						}
+						var streams = data.data
+						console.log(data)
+						if(streams.length > 0)
+						{	
+							if(this.streamer_icon)
+								this.set_image(this.streamer_icon)
+							else
+								this.set_image("streamer-status-on-air.png")
+							counterAction.SetTitle(this.context, "live")
+						}
+						else
+						{
+							if(this.streamer_icon)
+								this.set_image(this.streamer_icon)
+							else
+								this.set_image("streamer-status-off-air.png")
+							counterAction.SetTitle(this.context, "offair");
+						}
+					});
+			}
+
+			set_image(image)
+			{
+				if(this.currentImage != image)
+				{
+					this.log("Loading and setting: " + image)
+					loadAndSetImage(this.context, image)
+					this.currentImage = image
+				}
+				else
+					this.log("Already set to: " + image)
+			}
+
+			update_settings(settings)
+			{
+				console.log("[" + this.context + "]" + "Updating all settings", settings)
+				if('user_login' in settings)
+					this.user_login = settings['user_login']
+				this.connected = true
+				this.streamer_icon = ""
+				this.restart_updates()
+			}
+
+			update_setting(key, value)
+			{
+				console.log("[" + this.context + "]" + "Updating setting:", key)
+				if(key == 'user_login')
+					this.user_login = value
+				counterAction.SetSettings(this.context, this.settings());
+				this.connected = true
+				this.streamer_icon = ""
+				this.restart_updates()
+			}
+
+			settings()
+			{
+				return {'user_login': this.user_login};
+			}
+
+			clear_interval()
+			{
+				this.log("Clearing intervals")
+				if (this.interval)
+				{
+					clearInterval(this.interval)
+					this.interval = null
+				}
+			}
+
+			is_valid()
+			{
+				console.log("[" + this.context + "]" + "isvalid user_login:" + this.user_login)
+				console.log("[" + this.context + "]" + "isvalid connected:" + this.connected)
+				console.log("[" + this.context + "]" + "isvalid visible:" + this.visible)
+				console.log("[" + this.context + "]" + "isvalid authorized:" + authorized)
+				return this.user_login && this.connected && this.visible && authorized
+			}
+
+			restart_updates()
+			{
+				this.log("Restarting updates")
+				this.clear_interval()
+				if(!this.is_valid())
+				{
+					this.log("Not valid:" + this.user_login + this.connected + this.visible + authorized)
+					this.set_image("Disconnected.png")
+					return
+				}
+				this.update()
+				this.interval = setInterval(update_button, 120000, this)
+			}
+
+			open_url()
+			{
+				this.log("Opening URL")
+				if (!this.is_valid())
+				{
+					counterAction.ShowAlert(this.context)
+					return
+				}
+				counterAction.OpenURL("https://twitch.tv/" + this.user_login)
+			}
+		};
+
+		let TwitchButtons = class {
+			constructor() {
+				this.buttons = {}
+			}
+
+			get_button(context, settings) {
+				if (!(context in this.buttons))
+				{
+					this.buttons[context] = new TwitchButton(context, settings)
+				}
+				return this.buttons[context]
+			}
+
+			enable_buttons() {
+				console.log("[Buttons]Turning buttons back on")
+				for (let key in this.buttons) {
+					console.log(key)
+					console.log(this.buttons[key])
+					this.buttons[key].restart_updates()
+				}
+			}
+		};
+
+		var buttons = new TwitchButtons();
+        
+		function loadImage (inUrl, callback, inCanvas, inFillcolor) {
+			/** Convert to array, so we may load multiple images at once */
+			const aUrl = !Array.isArray(inUrl) ? [inUrl] : inUrl;
+			const canvas = inCanvas && inCanvas instanceof HTMLCanvasElement
+				? inCanvas
+				: document.createElement('canvas');
+			var imgCount = aUrl.length - 1;
+			const imgCache = {};
+
+			var ctx = canvas.getContext('2d');
+			ctx.globalCompositeOperation = 'source-over';
+
+			for (let url of aUrl) {
+				let image = new Image();
+				let cnt = imgCount;
+				let w = 144, h = 144;
+
+				image.onload = function () {
+					imgCache[url] = this;
+					// look at the size of the first image
+					if (url === aUrl[0]) {
+						canvas.width = this.naturalWidth; // or 'width' if you want a special/scaled size
+						canvas.height = this.naturalHeight; // or 'height' if you want a special/scaled size
+					}
+					// if (Object.keys(imgCache).length == aUrl.length) {
+					if (cnt < 1) {
+						if (inFillcolor) {
+							ctx.fillStyle = inFillcolor;
+							ctx.fillRect(0, 0, canvas.width, canvas.height);
+						}
+						// draw in the proper sequence FIFO
+						aUrl.forEach(e => {
+							if (!imgCache[e]) {
+								console.warn(imgCache[e], imgCache);
+							}
+
+							if (imgCache[e]) {
+								ctx.drawImage(imgCache[e], 0, 0);
+								ctx.save();
+							}
+						});
+
+						callback(canvas.toDataURL('image/png'));
+						// or to get raw image data
+						// callback && callback(canvas.toDataURL('image/png').replace(/^data:image\/(png|jpg);base64,/, ''));
+					}
+				};
+
+				imgCount--;
+				image.src = url;
+			}
+		};
+
+		function loadAndSetImage (context, imageNameOrArr) {
+			loadImage(imageNameOrArr, function (data) {
+				var json = {
+					'event': 'setImage',
+					'context': context,
+					'payload': {
+						'image': data,
+						'target': DestinationEnum.HARDWARE_AND_SOFTWARE
+					}
+				};
+				websocket.send(JSON.stringify(json));
+			});
+		};
+
+		function authorize() {
+			console.log("https://id.twitch.tv/oauth2/token?client_id=" + global_settings['appId'] + "&client_secret=" + global_settings['appSecret'] + "&grant_type=client_credentials")
+			fetch("https://id.twitch.tv/oauth2/token?client_id=" + global_settings['appId'] + "&client_secret=" + global_settings['appSecret'] + "&grant_type=client_credentials", {'method': 'POST'})
+				.then(response => {
+					if (!response.ok) {
+						console.log("[Auth]Authorization Failed")
+						authorized = false;
+						return null
+					}
+					return response.json()
+				})
+				.then(data => {
+					if(data)
+					{
+						console.log("[Auth]Authorization Succeeded", data)
+						global_settings['oauthToken'] = data.access_token
+						counterAction.SetGlobalSettings()
+						authorized = true;
+						buttons.enable_buttons()
+					}
+					else {
+						authorized = false;
+					}
+				})
+		};
+
+		function validate() {
+			fetch("https://id.twitch.tv/oauth2/validate", {'headers':{"Authorization": "Bearer " + global_settings['oauthToken'], "Client-Id": global_settings['appId']}})
+				.then(response => {
+					if (!response.ok) {
+						console.log("[Auth]Validation Failed, Error")
+						authorized = false;
+						authorize()
+						return null
+					}
+					return response.json()
+				})
+				.then(data => {
+					if (!data) {
+						console.log("[Auth]Validation Failed, Blank Response")
+						authorized = false;
+						authorize()
+					}
+					else
+					{
+						console.log("[Auth]Valid Token!")
+						authorized = true;
+						buttons.enable_buttons()
+					}
+				})
+		};
+
+    	var counterAction = {
+			
+			type : "com.threesixtydev.twitch.streamerstatus",
+			
+			onDidReceiveGlobalSettings : function(settings) {
+				global_settings = settings
+				if(global_settings['oauthToken'])
+					validate()
+				else if (global_settings['appId'] && global_settings['appSecret'])
+					authorize()
+			},
+
+			onDidReceiveSettings : function (context, settings) {
+				buttons.get_button(context, settings).update_settings(settings)
+			},
+
+			onKeyDown : function(context, settings, coordinates, userDesiredState) {
+              
+			},
+			
+			onKeyUp : function(context, settings, coordinates, userDesiredState) {
+				buttons.get_button(context, settings).open_url()
+			},
+			
+			onWillAppear : function(context, settings, coordinates) {
+				buttons.get_button(context, settings).onWillAppear()
+			},
+
+			onWillDisappear : function(context, settings, coordinates) {
+				buttons.get_button(context, settings).onWillDisappear()
+			},
+			
+			SetTitle : function(context, title_string) {
+				var json = {
+					"event": "setTitle",
+					"context": context,
+					"payload": {
+						"title": "" + title_string,
+						"target": DestinationEnum.HARDWARE_AND_SOFTWARE
+					}
+				};
+			
+				websocket.send(JSON.stringify(json));
+			 },
+
+			OpenURL : function(url) {
+				var json = {
+					"event": "openUrl",
+					"payload": {
+						"url": url
+					}
+				};
+			
+				websocket.send(JSON.stringify(json));
+			 },
+			 
+			ShowAlert : function(context) {
+				var json = {
+					"event": "showAlert",
+					"context": context,
+				};
+			
+				websocket.send(JSON.stringify(json));
+			 },
+			 
+			 SetSettings : function(context, settings) {
+				var json = {
+					"event": "setSettings",
+					"context": context,
+					"payload": settings
+				};
+			
+				websocket.send(JSON.stringify(json));
+				buttons.get_button(context, settings).settings()
+			 },
+
+			 SetGlobalSettings : function() {
+				var json = {
+					"event": "setGlobalSettings",
+					"context": pluginUUID,
+					"payload": global_settings
+				};
+			
+				websocket.send(JSON.stringify(json));
+			 }
+		};
+    	
+        function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo)
+         {
+         	pluginUUID = inPluginUUID
+         	
+			// Open the web socket
+			websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+			
+			function registerPlugin(inPluginUUID)
+			 {
+				var json = {
+					"event": inRegisterEvent,
+					"uuid": inPluginUUID
+				};
+			
+				websocket.send(JSON.stringify(json));
+				
+				var json = {
+					"event": "getGlobalSettings",
+					"context": pluginUUID
+				};
+				websocket.send(JSON.stringify(json));
+			 };
+			
+			websocket.onopen = function()
+			{
+				// WebSocket is connected, send message
+				registerPlugin(pluginUUID);
+			};
+
+			websocket.onmessage = function (evt)
+			{ 
+				// Received message from Stream Deck
+				var jsonObj = JSON.parse(evt.data);
+				var event = jsonObj['event'];
+				var action = jsonObj['action'];
+				var context = jsonObj['context'];
+				
+				if(event == "keyDown")
+				{
+					var jsonPayload = jsonObj['payload'];
+					var settings = jsonPayload['settings'];
+					var coordinates = jsonPayload['coordinates'];
+					var userDesiredState = jsonPayload['userDesiredState'];
+					counterAction.onKeyDown(context, settings, coordinates, userDesiredState);
+				}
+				else if(event == "keyUp")
+				{
+					var jsonPayload = jsonObj['payload'];
+					var settings = jsonPayload['settings'];
+					var coordinates = jsonPayload['coordinates'];
+					var userDesiredState = jsonPayload['userDesiredState'];
+					counterAction.onKeyUp(context, settings, coordinates, userDesiredState);
+				}
+				else if(event == "willAppear")
+				{
+					var jsonPayload = jsonObj['payload'];
+					var settings = jsonPayload['settings'];
+					var coordinates = jsonPayload['coordinates'];
+					counterAction.onWillAppear(context, settings, coordinates);
+				}
+				else if(event == "willDisappear")
+				{
+					var jsonPayload = jsonObj['payload'];
+					var settings = jsonPayload['settings'];
+					var coordinates = jsonPayload['coordinates'];
+					counterAction.onWillDisappear(context, settings, coordinates);
+				}
+				else if(event == "sendToPlugin")
+				{
+					var jsonPayload = jsonObj['payload'];
+					if ('sdpi_collection' in jsonPayload)
+					{
+						var sdpi_collection = jsonPayload['sdpi_collection']
+						buttons.get_button(context).update_setting(sdpi_collection['key'], sdpi_collection['value'])
+					}
+				}
+				else if(event == "didReceiveGlobalSettings")
+				{
+					var jsonPayload = jsonObj['payload'];
+					var settings = jsonPayload['settings'];
+					counterAction.onDidReceiveGlobalSettings(settings);
+				}
+				else if(event == "didReceiveSettings")
+				{
+					console.log(jsonObj)
+					var jsonPayload = jsonObj['payload'];
+					var settings = jsonPayload['settings'];
+					counterAction.onDidReceiveSettings(context, settings);
+				}
+				else
+				{
+					console.log("Unhandled Event:", event)
+				}
+			};
+
+			websocket.onclose = function()
+			{ 
+				// Websocket is closed
+			};
+         };
+         
+         
+         
+         
+    </script>
+
+</body>
+
+</html>
