@@ -21,11 +21,6 @@
 			<div class="sdpi-item-label">App Secret</div>
 			<input class="sdpi-item-value" type="password" id="appSecret" onchange="saveSettings();" required />
 		</div>
-		<div class="sdpi-item">
-			<div class="sdpi-item-label">Discord</div>
-			<button class="sdpi-item-value" type="button" onclick="reconnect();">Reconnect</button>
-			<button class="sdpi-item-value" type="button" onclick="reauthenticate();">Reauthenticate</button>
-		</div>
 	</div>
 
 	<script src="common.js"></script>
@@ -79,14 +74,6 @@
 				$SD.api.setGlobalSettings(uuid, settings);
 			}
 			$SD.api.setSettings(uuid, {"user_login": document.getElementById('user_login').value});
-		};
-
-		function reconnect() {
-			$SD.api.sendToPlugin(uuid, actionInfo, {event: "reconnect"});
-		};
-
-		function reauthenticate() {
-			$SD.api.sendToPlugin(uuid, actionInfo, {event: "reauthenticate"});
 		};
 
 		function sendToPropertyInspector(jsonObj) {

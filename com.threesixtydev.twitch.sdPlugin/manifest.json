@@ -5,10 +5,7 @@
       "Icon": "streamer-status",
       "States": [
         {
-          "Image": "streamer-status-on-air"
-        },
-        {
-          "Image": "streamer-status-off-air"
+          "Image": "streamer-status"
         }
       ],
       "SupportedInMultiActions": false,
@@ -22,6 +19,7 @@
   "PropertyInspectorPath": "propertyinspector/index.html",
   "Description": "Twitch Streamer Status",
   "Name": "Twitch Streamer Status",
+  "Icon": "streamer-status",
   "Category": "Twitch Streamer",
   "Version": "3.0",
   "URL": "",
